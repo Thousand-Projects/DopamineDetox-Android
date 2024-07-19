@@ -27,12 +27,23 @@ class AppLaunchService : AccessibilityService() {
             if (packageName != null) {
                 val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
                 val selectedAppPackages = sharedPreferences.getStringSet("selected_app_packages", emptySet()) ?: emptySet()
+                Log.d("TEST",selectedAppPackages.toString())
                 if (selectedAppPackages.contains(packageName)) {
-                    val intent = Intent(this, BreathActivity::class.java).apply {
-                        putExtra("PACKAGE_NAME",packageName)
+                    val currentTime = System.currentTimeMillis()
+                    val lastLaunchTime = sharedPreferences.getLong(packageName, 0L)
+                    val interval = 30 *60 *1000
+                    Log.d("TEST",lastLaunchTime.toString())
+                    Log.d("TEST1",currentTime.toString())
+
+                    if (currentTime - lastLaunchTime > interval || lastLaunchTime == 0L) {
+                        with(sharedPreferences.edit()) {
+                            putLong(packageName, currentTime)
+                            apply()
+                        }
+                        val intent = Intent(this, BreathActivity::class.java)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
                     }
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
                 }
             }
         }
