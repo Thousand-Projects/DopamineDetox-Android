@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 class BreathActivity: ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val packageName = intent.getStringExtra("PACKAGE_NAME")
+        val packageName = intent.getStringExtra("PACKAGE_NAME") ?: ""
 
         setContent {
             Scaffold(
@@ -19,7 +19,7 @@ class BreathActivity: ComponentActivity() {
             ) { innerPadding->
                 DetoxNavHost(
                     modifier = Modifier.padding(innerPadding),
-                    packageName = packageName!!,
+                    packageName = packageName,
                 )
             }
         }
