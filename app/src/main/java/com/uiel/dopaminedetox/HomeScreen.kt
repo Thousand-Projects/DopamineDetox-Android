@@ -1,11 +1,8 @@
 package com.uiel.dopaminedetox
 
-import android.annotation.SuppressLint
-import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -23,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,7 +31,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.uiel.dopaminedetox.ui.theme.Purple40
 import java.util.Calendar
 
 @Composable
@@ -48,40 +44,37 @@ fun HomeScreen(
     var showAccessibilityDialog by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
 
-    var usageStats by remember {
-        mutableStateOf<List<UsageStats>>(emptyList())
-    }
+    var usageStats by remember { mutableLongStateOf(0L) }
     var isTimePermissionGranted by remember {
         mutableStateOf(false)
     }
-    var total = remember { 0L }
-    var hour = remember { 0L }
-    var minute = remember { 0L }
+    var hour = 0L
+    var minute = 0L
 
-    LaunchedEffect(hasAccessibilityPermission(context)) {
-
+    LaunchedEffect(showTimeDialog) {
+        Log.d("TEST1","1")
+        if (!hasUsageStatsPermission(context)) {
+            showTimeDialog = true
+        } else {
+            showTimeDialog = false
+            isTimePermissionGranted = true
+            usageStats = getDailyUsageTime(context)
+        }
     }
 
-    if(!hasUsageStatsPermission(context)) {
-        showTimeDialog = true
-    } else {
-        showTimeDialog = false
-        isTimePermissionGranted = true
-        usageStats = getUsageStats(context)
+    LaunchedEffect(showAccessibilityDialog) {
+        if (!isAccessPermissionGranted) {
+            showAccessibilityDialog = true
+        } else {
+            showAccessibilityDialog = false
+        }
     }
-
-    if(!isAccessPermissionGranted) {
-        showAccessibilityDialog = true
-    } else {
-        showAccessibilityDialog = false
-    }
-
 
     TimePermissionDialog(
         showDialog = showTimeDialog,
         onDismiss = { showTimeDialog = false },
         onConfirm = {
-            showTimeDialog = true
+            showTimeDialog = false
             requestUsageStatsPermission(context)
         }
     )
@@ -90,7 +83,7 @@ fun HomeScreen(
         showDialog = showAccessibilityDialog,
         onDismiss = { showAccessibilityDialog = false },
         onConfirm = {
-            showAccessibilityDialog = true
+            showAccessibilityDialog = false
             requestAccessibilityPermission(context)
         },
     )
@@ -100,15 +93,8 @@ fun HomeScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        usageStats.map {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                total += it.totalTimeVisible
-            } else {
-                TODO("VERSION.SDK_INT < Q")
-            }
-        }
-        hour = (total/(1000*60*60))%24
-        minute = (total/(1000*60))%60
+        hour = (usageStats / (1000 * 60 * 60)) % 24
+        minute = (usageStats / (1000 * 60)) % 60
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = "핸드폰 사용시간:",
@@ -160,23 +146,31 @@ fun requestUsageStatsPermission(context: Context) {
     context.startActivity(intent)
 }
 
-@SuppressLint("ServiceCast")
-fun getUsageStats(context: Context): List<UsageStats> {
-    val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+fun getDailyUsageTime(context: Context): Long {
+    val usageStatsManager =
+        context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+
     val calendar = Calendar.getInstance()
     val endTime = calendar.timeInMillis
-    calendar.add(Calendar.DAY_OF_MONTH, -1)
+    calendar.add(Calendar.DAY_OF_YEAR, -1)
     val startTime = calendar.timeInMillis
 
-    return usageStatsManager.queryUsageStats(
-        UsageStatsManager.INTERVAL_DAILY,
-        startTime,
-        endTime
-    )
+    val queryUsageStats =
+        usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+
+    var totalUsageTime: Long = 0
+    for (usageStats in queryUsageStats) {
+        totalUsageTime += usageStats.totalTimeInForeground
+    }
+
+    return totalUsageTime
 }
 
 fun hasAccessibilityPermission(context: Context): Boolean {
-    val enabledServices = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+    val enabledServices = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    )
     return enabledServices != null && enabledServices.contains(context.packageName)
 }
 
@@ -187,7 +181,11 @@ fun requestAccessibilityPermission(context: Context) {
 }
 
 @Composable
-fun AccessibilityPermissionDialog(showDialog: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+fun AccessibilityPermissionDialog(
+    showDialog: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
     if (showDialog) {
         AlertDialog(
             onDismissRequest = onDismiss,
